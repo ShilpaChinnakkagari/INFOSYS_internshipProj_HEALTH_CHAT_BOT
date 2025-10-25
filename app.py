@@ -398,28 +398,6 @@ def admin_dashboard():
                              user_growth_chart=None,
                              health_score_chart=None)
 
-@app.route('/admin/users')
-@login_required
-def admin_users():
-    if not current_user.is_admin:
-        return redirect(url_for('user_dashboard'))
-    
-    users = User.query.filter_by(is_admin=False).all()
-    users_data = []
-    for user in users:
-        latest_score = HealthScore.query.filter_by(user_id=user.id).order_by(HealthScore.date.desc()).first()
-        chat_count = ChatHistory.query.filter_by(user_id=user.id).count()
-        emergency_count = EmergencyLog.query.filter_by(user_id=user.id).count()
-        
-        users_data.append({
-            'user': user,
-            'latest_score': latest_score.score if latest_score else 'N/A',
-            'chat_count': chat_count,
-            'emergency_count': emergency_count
-        })
-    
-    return render_template('admin_users.html', users_data=users_data)
-
 @app.route('/admin/health-tips')
 @login_required
 def admin_health_tips():
@@ -647,6 +625,76 @@ def generate_chat_response(message, user):
             except:
                 return response
         return response
+
+# Add these routes to your existing app.py
+
+@app.route('/admin/users')
+@login_required
+def admin_users():
+    if not current_user.is_admin:
+        return redirect(url_for('user_dashboard'))
+    
+    users = User.query.filter_by(is_admin=False).all()
+    users_data = []
+    for user in users:
+        latest_score = HealthScore.query.filter_by(user_id=user.id).order_by(HealthScore.date.desc()).first()
+        chat_count = ChatHistory.query.filter_by(user_id=user.id).count()
+        emergency_count = EmergencyLog.query.filter_by(user_id=user.id).count()
+        health_scores = HealthScore.query.filter_by(user_id=user.id).order_by(HealthScore.date.desc()).limit(5).all()
+        
+        users_data.append({
+            'user': user,
+            'latest_score': latest_score.score if latest_score else 'N/A',
+            'chat_count': chat_count,
+            'emergency_count': emergency_count,
+            'health_scores': health_scores
+        })
+    
+    return render_template('admin_users.html', users_data=users_data)
+
+@app.route('/admin/user/<int:user_id>')
+@login_required
+def admin_user_detail(user_id):
+    if not current_user.is_admin:
+        return redirect(url_for('user_dashboard'))
+    
+    user = User.query.get_or_404(user_id)
+    health_scores = HealthScore.query.filter_by(user_id=user_id).order_by(HealthScore.date.desc()).all()
+    chat_history = ChatHistory.query.filter_by(user_id=user_id).order_by(ChatHistory.timestamp.desc()).limit(20).all()
+    emergencies = EmergencyLog.query.filter_by(user_id=user_id).order_by(EmergencyLog.timestamp.desc()).all()
+    
+    # Generate health chart for this user
+    chart_url = generate_health_chart(user_id)
+    
+    return render_template('admin_user_detail.html', 
+                         user=user, 
+                         health_scores=health_scores,
+                         chat_history=chat_history,
+                         emergencies=emergencies,
+                         chart_url=chart_url)
+
+@app.route('/admin/delete_user/<int:user_id>', methods=['DELETE'])
+@login_required
+def delete_user(user_id):
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Unauthorized'})
+    
+    try:
+        user = User.query.get(user_id)
+        if user and not user.is_admin:
+            # Delete related records
+            HealthScore.query.filter_by(user_id=user_id).delete()
+            ChatHistory.query.filter_by(user_id=user_id).delete()
+            EmergencyLog.query.filter_by(user_id=user_id).delete()
+            
+            db.session.delete(user)
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'User deleted successfully'})
+        return jsonify({'success': False, 'message': 'User not found'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
+    
 
 def generate_health_chart(user_id):
     try:

@@ -1,62 +1,118 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container">
-    <h2 class="mb-4">Health Tips Management</h2>
-    
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-stethoscope"></i> Health Tips Management</h2>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left"></i> Dashboard
+        </a>
+    </div>
+
     <div class="row">
-        <div class="col-md-6">
-            <div class="card">
+        <!-- Add New Tip -->
+        <div class="col-lg-5 mb-4">
+            <div class="card border-primary">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">Add New Health Tip</h5>
+                    <h5 class="mb-0"><i class="fas fa-plus-circle"></i> Add New Health Tip</h5>
                 </div>
                 <div class="card-body">
                     <form id="tip-form">
                         <div class="mb-3">
-                            <label class="form-label">Title</label>
-                            <input type="text" class="form-control" id="tip-title" required>
+                            <label class="form-label">Title *</label>
+                            <input type="text" class="form-control" id="tip-title" required 
+                                   placeholder="e.g., Migraine Relief Tips">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Symptoms (comma separated)</label>
-                            <input type="text" class="form-control" id="tip-symptoms" placeholder="fever,headache,cough" required>
+                            <label class="form-label">Symptoms/Keywords *</label>
+                            <input type="text" class="form-control" id="tip-symptoms" 
+                                   placeholder="migraine,headache,सिरदर्द,माइग्रेन" required>
+                            <div class="form-text">Comma separated symptoms in English and Hindi</div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Category</label>
+                            <label class="form-label">Category *</label>
                             <select class="form-select" id="tip-category" required>
-                                <option value="general">General</option>
+                                <option value="">Select Category</option>
                                 <option value="fever">Fever</option>
-                                <option value="pain">Pain</option>
-                                <option value="cold">Cold/Flu</option>
+                                <option value="head_pain">Head Pain</option>
+                                <option value="cold_flu">Cold & Flu</option>
+                                <option value="stomach">Stomach Issues</option>
+                                <option value="pain">General Pain</option>
+                                <option value="respiratory">Respiratory</option>
+                                <option value="skin">Skin Issues</option>
+                                <option value="mental_health">Mental Health</option>
+                                <option value="general">General Health</option>
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Content</label>
-                            <textarea class="form-control" id="tip-content" rows="5" required></textarea>
+                            <label class="form-label">Content *</label>
+                            <textarea class="form-control" id="tip-content" rows="6" required
+                                      placeholder="Provide detailed health advice..."></textarea>
+                            <div class="form-text">This content will be automatically translated to Hindi when users ask in Hindi</div>
                         </div>
-                        <button type="submit" class="btn btn-success">Add Health Tip</button>
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-save"></i> Add Health Tip
+                        </button>
                     </form>
                 </div>
             </div>
         </div>
         
-        <div class="col-md-6">
+        <!-- Existing Tips -->
+        <div class="col-lg-7">
             <div class="card">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">Existing Health Tips</h5>
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-list"></i> Existing Health Tips ({{ tips|length }})</h5>
+                    <span class="badge bg-light text-dark">{{ tips|length }} tips</span>
                 </div>
                 <div class="card-body">
                     {% if tips %}
-                    {% for tip in tips %}
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h6>{{ tip.title }}</h6>
-                            <p class="mb-1"><strong>Symptoms:</strong> {{ tip.symptoms }}</p>
-                            <p class="mb-1">{{ tip.content[:100] }}...</p>
-                            <small class="text-muted">Category: {{ tip.category }}</small>
+                    <div class="row">
+                        {% for tip in tips %}
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100 tip-card" data-tip-id="{{ tip.id }}">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <h6 class="card-title text-primary">{{ tip.title }}</h6>
+                                        <span class="badge bg-{{ 
+                                            'primary' if tip.category == 'fever' else
+                                            'warning' if tip.category == 'head_pain' else
+                                            'info' if tip.category == 'cold_flu' else
+                                            'success' if tip.category == 'stomach' else
+                                            'secondary'
+                                        }}">{{ tip.category|replace('_', ' ')|title }}</span>
+                                    </div>
+                                    <p class="card-text small text-muted mb-2">
+                                        <strong>Symptoms:</strong> {{ tip.symptoms }}
+                                    </p>
+                                    <p class="card-text small">{{ tip.content[:120] }}...</p>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-muted">
+                                            Created: {{ tip.created_at.strftime('%Y-%m-%d') }}
+                                        </small>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary btn-sm" 
+                                                    onclick="editTip({{ tip.id }})"
+                                                    title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger btn-sm" 
+                                                    onclick="deleteTip({{ tip.id }}, '{{ tip.title }}')"
+                                                    title="Delete">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                     {% else %}
-                    <p class="text-muted">No health tips added yet.</p>
+                    <div class="text-center py-4">
+                        <i class="fas fa-stethoscope fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No Health Tips Added</h5>
+                        <p class="text-muted">Add your first health tip using the form on the left.</p>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -64,9 +120,26 @@
     </div>
 </div>
 
+<!-- Edit Tip Modal -->
+<div class="modal fade" id="editTipModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Health Tip</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="editTipContent">
+                <!-- Content loaded via JavaScript -->
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+// Add new health tip
 document.getElementById('tip-form').addEventListener('submit', function(e) {
     e.preventDefault();
+    
     const data = {
         title: document.getElementById('tip-title').value,
         symptoms: document.getElementById('tip-symptoms').value,
@@ -84,8 +157,98 @@ document.getElementById('tip-form').addEventListener('submit', function(e) {
         if (data.success) {
             alert('Health tip added successfully!');
             location.reload();
+        } else {
+            alert('Error adding health tip');
         }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
     });
 });
+
+// Edit health tip
+function editTip(tipId) {
+    // In a real implementation, you would fetch the tip data and populate the modal
+    const editUrl = `/admin/edit_tip/${tipId}`;
+    // For now, show a simple edit form
+    document.getElementById('editTipContent').innerHTML = `
+        <form onsubmit="updateTip(${tipId})">
+            <div class="mb-3">
+                <label class="form-label">Title</label>
+                <input type="text" class="form-control" id="edit-title" value="Loading...">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Symptoms</label>
+                <input type="text" class="form-control" id="edit-symptoms" value="Loading...">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Content</label>
+                <textarea class="form-control" id="edit-content" rows="5">Loading...</textarea>
+            </div>
+            <div class="text-end">
+                <button type="submit" class="btn btn-primary">Update Tip</button>
+            </div>
+        </form>
+    `;
+    
+    // Fetch actual tip data
+    fetch(`/admin/get_tip/${tipId}`)
+        .then(r => r.json())
+        .then(tip => {
+            document.getElementById('edit-title').value = tip.title;
+            document.getElementById('edit-symptoms').value = tip.symptoms;
+            document.getElementById('edit-content').value = tip.content;
+        });
+    
+    new bootstrap.Modal(document.getElementById('editTipModal')).show();
+}
+
+function updateTip(tipId) {
+    event.preventDefault();
+    const data = {
+        title: document.getElementById('edit-title').value,
+        symptoms: document.getElementById('edit-symptoms').value,
+        content: document.getElementById('edit-content').value
+    };
+    
+    fetch(`/admin/update_health_tip/${tipId}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Health tip updated successfully!');
+            location.reload();
+        }
+    });
+}
+
+function deleteTip(tipId, title) {
+    if (confirm(`Are you sure you want to delete "${title}"?`)) {
+        fetch(`/admin/delete_health_tip/${tipId}`, {
+            method: 'DELETE'
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('Health tip deleted successfully!');
+                location.reload();
+            }
+        });
+    }
+}
 </script>
+
+<style>
+.tip-card {
+    transition: transform 0.2s;
+    cursor: pointer;
+}
+.tip-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+</style>
 {% endblock %}

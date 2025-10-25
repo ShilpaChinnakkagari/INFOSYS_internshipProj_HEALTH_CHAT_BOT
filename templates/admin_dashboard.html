@@ -1,47 +1,159 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container">
-    <h2 class="mb-4">Admin Dashboard</h2>
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-tachometer-alt"></i> Admin Dashboard</h2>
+        <div class="btn-group">
+            <a href="{{ url_for('admin_analytics') }}" class="btn btn-outline-info">
+                <i class="fas fa-chart-bar"></i> Analytics
+            </a>
+            <a href="{{ url_for('admin_settings') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-cog"></i> Settings
+            </a>
+        </div>
+    </div>
     
+    <!-- Statistics Cards -->
     <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-white bg-primary">
-                <div class="card-body text-center">
-                    <h3>{{ total_users }}</h3>
-                    <p>Total Users</p>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Users</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_users }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-users fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Total Chats</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_chats }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-comments fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Health Scores</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_health_scores }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-heartbeat fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Emergencies</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ emergency_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-ambulance fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row">
+    <!-- Quick Actions -->
+    <div class="row mb-4">
         <div class="col-md-4 mb-3">
-            <div class="card">
+            <div class="card border-primary">
                 <div class="card-body text-center">
-                    <i class="fas fa-plus-circle fa-3x text-primary mb-3"></i>
-                    <h5>Add Health Tips</h5>
-                    <p class="text-muted">Add health tips for symptoms</p>
-                    <a href="{{ url_for('admin_health_tips') }}" class="btn btn-outline-primary">Manage</a>
+                    <i class="fas fa-users fa-3x text-primary mb-3"></i>
+                    <h5>User Management</h5>
+                    <p class="text-muted">View and manage all users</p>
+                    <a href="{{ url_for('admin_users') }}" class="btn btn-primary">Manage Users</a>
                 </div>
             </div>
         </div>
         <div class="col-md-4 mb-3">
-            <div class="card">
+            <div class="card border-success">
                 <div class="card-body text-center">
-                    <i class="fas fa-chart-bar fa-3x text-success mb-3"></i>
+                    <i class="fas fa-stethoscope fa-3x text-success mb-3"></i>
+                    <h5>Health Tips</h5>
+                    <p class="text-muted">Manage health tips and symptoms</p>
+                    <a href="{{ url_for('admin_health_tips') }}" class="btn btn-success">Manage Tips</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card border-info">
+                <div class="card-body text-center">
+                    <i class="fas fa-chart-pie fa-3x text-info mb-3"></i>
                     <h5>Analytics</h5>
-                    <p class="text-muted">View reports and analytics</p>
-                    <a href="{{ url_for('admin_analytics') }}" class="btn btn-outline-success">View Reports</a>
+                    <p class="text-muted">View detailed analytics & reports</p>
+                    <a href="{{ url_for('admin_analytics') }}" class="btn btn-info">View Analytics</a>
                 </div>
             </div>
         </div>
-        <div class="col-md-4 mb-3">
+    </div>
+
+    <!-- Recent Emergencies -->
+    <div class="row">
+        <div class="col-md-6">
             <div class="card">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="mb-0"><i class="fas fa-ambulance"></i> Recent Emergencies</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_emergencies %}
+                        {% for emergency in recent_emergencies %}
+                        <div class="alert alert-warning">
+                            <div class="d-flex justify-content-between">
+                                <strong>User ID: {{ emergency.user_id }}</strong>
+                                <small>{{ emergency.timestamp.strftime('%m/%d %H:%M') }}</small>
+                            </div>
+                            <p class="mb-0">Location: {{ emergency.location }}</p>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No recent emergencies</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-line"></i> Health Score Distribution</h5>
+                </div>
                 <div class="card-body text-center">
-                    <i class="fas fa-cog fa-3x text-warning mb-3"></i>
-                    <h5>System Settings</h5>
-                    <p class="text-muted">Configure system settings</p>
-                    <a href="{{ url_for('admin_settings') }}" class="btn btn-outline-warning">Settings</a>
+                    {% if health_score_chart %}
+                        <img src="{{ health_score_chart }}" alt="Health Score Chart" class="img-fluid">
+                    {% else %}
+                        <p class="text-muted">No health score data available</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
