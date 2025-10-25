@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <img src="https://ui-avatars.com/api/?name={{ current_user.name }}&background=007bff&color=fff&size=100" class="rounded-circle mb-3">
+                <h5>{{ current_user.name }}</h5>
+                <p class="text-muted">{{ current_user.email }}</p>
+                <p><strong>Age:</strong> {{ current_user.age }}</p>
+                <p><strong>Location:</strong> {{ current_user.location }}</p>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <button class="btn btn-outline-primary btn-sm w-100 mb-2" onclick="showSection('chat')">Health Chat</button>
+                <button class="btn btn-outline-success btn-sm w-100 mb-2" onclick="showSection('health')">Health Score</button>
+                <button class="btn btn-outline-info btn-sm w-100 mb-2" onclick="showSection('chat-history')">Chat History</button>
+                <button class="btn btn-outline-secondary btn-sm w-100 mb-2" onclick="showSection('profile')">Profile</button>
+            </div>
+        </div>
+
+        <button class="btn btn-danger btn-lg w-100 mt-3" onclick="triggerEmergency()">
+            <i class="fas fa-ambulance"></i> EMERGENCY
+        </button>
+    </div>
+
+    <div class="col-md-9">
+        <!-- Chat Section -->
+        <div id="chat-section" class="dashboard-section">
+            <div class="card">
+                <div class="card-header"><h5>Health Assistant Chat</h5></div>
+                <div class="card-body">
+                    <div id="chat-container" class="border p-3 mb-3" style="height: 300px; overflow-y: auto;">
+                        <div class="alert alert-light">
+                            <strong>HealthBot:</strong> Hello {{ current_user.name }}! I'm your health assistant.
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <input type="text" id="chat-input" class="form-control" placeholder="Describe your symptoms...">
+                        <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Health Score Section -->
+        <div id="health-section" class="dashboard-section" style="display:none">
+            <div class="card">
+                <div class="card-header"><h5>Health Progress</h5></div>
+                <div class="card-body">
+                    {% if health_scores %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead><tr><th>Date</th><th>Score</th><th>Notes</th></tr></thead>
+                            <tbody>
+                                {% for score in health_scores %}
+                                <tr>
+                                    <td>{{ score.date.strftime('%Y-%m-%d') }}</td>
+                                    <td><span class="badge bg-{% if score.score >= 80 %}success{% elif score.score >= 60 %}warning{% else %}danger{% endif %}">{{ score.score }}/100</span></td>
+                                    <td>{{ score.notes or '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No health scores yet.</p>
+                    {% endif %}
+                    
+                    <div class="mt-4">
+                        <h6>Update Health Score</h6>
+                        <div class="input-group">
+                            <input type="number" id="health-score-input" class="form-control" placeholder="Score (0-100)" min="0" max="100">
+                            <input type="text" id="health-notes-input" class="form-control" placeholder="Notes">
+                            <button class="btn btn-success" onclick="updateHealthScore()">Update</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat History Section -->
+        <div id="chat-history-section" class="dashboard-section" style="display:none">
+            <div class="card">
+                <div class="card-header"><h5>Chat History</h5></div>
+                <div class="card-body">
+                    {% if chat_history %}
+                    <div style="max-height: 500px; overflow-y: auto;">
+                        {% for chat in chat_history %}
+                        <div class="card mb-2">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <small class="text-muted">{{ chat.timestamp.strftime('%Y-%m-%d %H:%M') }}</small>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteChat({{ chat.id }})">Delete</button>
+                                </div>
+                                <p class="mb-1"><strong>You:</strong> {{ chat.message }}</p>
+                                <p class="mb-0"><strong>Bot:</strong> {{ chat.response }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No chat history.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Section -->
+        <div id="profile-section" class="dashboard-section" style="display:none">
+            <div class="card">
+                <div class="card-header"><h5>Profile Management</h5></div>
+                <div class="card-body">
+                    <form id="profile-form">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label>Name</label>
+                                <input type="text" class="form-control" name="name" value="{{ current_user.name }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label>Age</label>
+                                <input type="number" class="form-control" name="age" value="{{ current_user.age }}">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label>Email</label>
+                            <input type="email" class="form-control" value="{{ current_user.email }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label>Location</label>
+                            <input type="text" class="form-control" name="location" value="{{ current_user.location }}">
+                        </div>
+                        <div class="mb-3">
+                            <label>Language</label>
+                            <select class="form-select" name="language">
+                                <option value="en" {% if current_user.language == 'en' %}selected{% endif %}>English</option>
+                                <option value="es" {% if current_user.language == 'es' %}selected{% endif %}>Spanish</option>
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="updateProfile()">Update Profile</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showSection(section) {
+    document.querySelectorAll('.dashboard-section').forEach(div => div.style.display = 'none');
+    document.getElementById(section + '-section').style.display = 'block';
+}
+
+function sendMessage() {
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (message) {
+        const chatContainer = document.getElementById('chat-container');
+        chatContainer.innerHTML += `<div class="alert alert-primary text-end"><strong>You:</strong> ${message}</div>`;
+        input.value = '';
+        
+        fetch('/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: message})
+        })
+        .then(r => r.json())
+        .then(data => {
+            chatContainer.innerHTML += `<div class="alert alert-light"><strong>HealthBot:</strong> ${data.response}</div>`;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        });
+    }
+}
+
+function updateHealthScore() {
+    const score = document.getElementById('health-score-input').value;
+    const notes = document.getElementById('health-notes-input').value;
+    if (score) {
+        fetch('/health/score', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({score: score, notes: notes})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('Health score updated!');
+                location.reload();
+            }
+        });
+    }
+}
+
+function deleteChat(chatId) {
+    if (confirm('Delete this chat?')) {
+        fetch(`/chat/delete/${chatId}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) location.reload();
+        });
+    }
+}
+
+function updateProfile() {
+    const form = document.getElementById('profile-form');
+    const data = {
+        name: form.name.value,
+        age: form.age.value,
+        location: form.location.value,
+        language: form.language.value
+    };
+    fetch('/profile/update', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Profile updated!');
+            location.reload();
+        }
+    });
+}
+
+function triggerEmergency() {
+    alert('Emergency services notified! In real implementation, this would contact hospitals.');
+}
+
+// Enter key for chat
+document.getElementById('chat-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') sendMessage();
+});
+
+showSection('chat');
+</script>
+{% endblock %}

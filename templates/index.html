@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row align-items-center min-vh-80">
+    <div class="col-md-6">
+        <h1 class="display-4 fw-bold text-primary">Your Personal Health Assistant</h1>
+        <p class="lead mb-4">Get personalized health guidance, track your wellness journey, and access emergency support when you need it most.</p>
+        
+        <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+            <a href="{{ url_for('signup') }}" class="btn btn-primary btn-lg px-4 me-md-2">
+                <i class="fas fa-user-plus"></i> Get Started
+            </a>
+            <a href="{{ url_for('login') }}" class="btn btn-outline-primary btn-lg px-4">
+                <i class="fas fa-sign-in-alt"></i> Login
+            </a>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1f?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" 
+             alt="Health and Wellness" class="img-fluid rounded-3">
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 text-center">
+            <div class="card-body">
+                <i class="fas fa-robot fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">AI Health Chatbot</h5>
+                <p class="card-text">Get instant health advice and wellness guidance powered by intelligent AI.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 text-center">
+            <div class="card-body">
+                <i class="fas fa-chart-line fa-3x text-success mb-3"></i>
+                <h5 class="card-title">Progress Tracking</h5>
+                <p class="card-text">Monitor your health journey with detailed analytics and visual graphs.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 text-center">
+            <div class="card-body">
+                <i class="fas fa-ambulance fa-3x text-danger mb-3"></i>
+                <h5 class="card-title">Emergency Support</h5>
+                <p class="card-text">Instant connection to emergency services based on your location.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

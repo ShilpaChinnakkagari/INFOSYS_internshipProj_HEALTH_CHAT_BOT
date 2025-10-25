@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h2 class="mb-4">Admin Dashboard</h2>
+    
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body text-center">
+                    <h3>{{ total_users }}</h3>
+                    <p>Total Users</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4 mb-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-plus-circle fa-3x text-primary mb-3"></i>
+                    <h5>Add Health Tips</h5>
+                    <p class="text-muted">Add health tips for symptoms</p>
+                    <a href="{{ url_for('admin_health_tips') }}" class="btn btn-outline-primary">Manage</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-chart-bar fa-3x text-success mb-3"></i>
+                    <h5>Analytics</h5>
+                    <p class="text-muted">View reports and analytics</p>
+                    <a href="{{ url_for('admin_analytics') }}" class="btn btn-outline-success">View Reports</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-cog fa-3x text-warning mb-3"></i>
+                    <h5>System Settings</h5>
+                    <p class="text-muted">Configure system settings</p>
+                    <a href="{{ url_for('admin_settings') }}" class="btn btn-outline-warning">Settings</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

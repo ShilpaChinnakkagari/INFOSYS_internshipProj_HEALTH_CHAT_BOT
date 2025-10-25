@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h2 class="mb-4">Health Tips Management</h2>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Add New Health Tip</h5>
+                </div>
+                <div class="card-body">
+                    <form id="tip-form">
+                        <div class="mb-3">
+                            <label class="form-label">Title</label>
+                            <input type="text" class="form-control" id="tip-title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Symptoms (comma separated)</label>
+                            <input type="text" class="form-control" id="tip-symptoms" placeholder="fever,headache,cough" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Category</label>
+                            <select class="form-select" id="tip-category" required>
+                                <option value="general">General</option>
+                                <option value="fever">Fever</option>
+                                <option value="pain">Pain</option>
+                                <option value="cold">Cold/Flu</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Content</label>
+                            <textarea class="form-control" id="tip-content" rows="5" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-success">Add Health Tip</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Existing Health Tips</h5>
+                </div>
+                <div class="card-body">
+                    {% if tips %}
+                    {% for tip in tips %}
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h6>{{ tip.title }}</h6>
+                            <p class="mb-1"><strong>Symptoms:</strong> {{ tip.symptoms }}</p>
+                            <p class="mb-1">{{ tip.content[:100] }}...</p>
+                            <small class="text-muted">Category: {{ tip.category }}</small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p class="text-muted">No health tips added yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('tip-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = {
+        title: document.getElementById('tip-title').value,
+        symptoms: document.getElementById('tip-symptoms').value,
+        category: document.getElementById('tip-category').value,
+        content: document.getElementById('tip-content').value
+    };
+    
+    fetch('/admin/add_health_tip', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Health tip added successfully!');
+            location.reload();
+        }
+    });
+});
+</script>
+{% endblock %}

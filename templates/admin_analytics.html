@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h2 class="mb-4"><i class="fas fa-chart-bar"></i> Analytics & Reports</h2>
+    
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-white bg-primary">
+                <div class="card-body text-center">
+                    <h3>{{ total_users }}</h3>
+                    <p>Total Users</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-success">
+                <div class="card-body text-center">
+                    <h3>{{ total_chats }}</h3>
+                    <p>Total Chats</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-info">
+                <div class="card-body text-center">
+                    <h3>{{ total_health_scores }}</h3>
+                    <p>Health Scores</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="mb-0"><i class="fas fa-users"></i> Recent Users</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_users %}
+                    {% for user in recent_users %}
+                    <div class="border-bottom pb-2 mb-2">
+                        <strong>{{ user.name }}</strong><br>
+                        <small class="text-muted">{{ user.email }}</small><br>
+                        <small>Age: {{ user.age }} | Location: {{ user.location }}</small>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p class="text-muted">No users found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-comments"></i> Recent Chats</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_chats %}
+                    {% for chat in recent_chats %}
+                    <div class="border-bottom pb-2 mb-2">
+                        <small class="text-muted">{{ chat.timestamp.strftime('%m/%d %H:%M') }}</small><br>
+                        <strong>User:</strong> {{ chat.message[:30] }}...<br>
+                        <strong>Bot:</strong> {{ chat.response[:30] }}...
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p class="text-muted">No chats found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="fas fa-download"></i> Download Reports (PDF)</h5>
+        </div>
+        <div class="card-body text-center">
+            <div class="row">
+                <div class="col-md-4">
+                    <a href="/admin/generate_report/users" class="btn btn-primary btn-lg w-100 mb-2">
+                        <i class="fas fa-users"></i><br>
+                        Users Report
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a href="/admin/generate_report/chats" class="btn btn-success btn-lg w-100 mb-2">
+                        <i class="fas fa-comments"></i><br>
+                        Chats Report
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a href="/admin/generate_report/health" class="btn btn-info btn-lg w-100 mb-2">
+                        <i class="fas fa-heartbeat"></i><br>
+                        Health Report
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

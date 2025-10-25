@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h2 class="mb-4">System Settings</h2>
+    
+    <div class="card">
+        <div class="card-header bg-secondary text-white">
+            <h5 class="mb-0">Application Settings</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">System Name</label>
+                <input type="text" class="form-control" value="Health Wellness Chatbot" readonly>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Emergency Mode</label>
+                <select class="form-select">
+                    <option>Simulation Mode</option>
+                    <option disabled>Live Mode</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" disabled>Save Settings</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
