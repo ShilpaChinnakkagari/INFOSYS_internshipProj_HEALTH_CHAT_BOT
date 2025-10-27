@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-user-circle"></i> User Details: {{ user.name }}</h2>
+        <div class="btn-group">
+            <a href="{{ url_for('admin_users') }}" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left"></i> Back to Users
+            </a>
+            <button class="btn btn-outline-danger" onclick="deleteUser({{ user.id }}, '{{ user.name }}')">
+                <i class="fas fa-trash"></i> Delete User
+            </button>
+        </div>
+    </div>
+
+    <!-- User Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-comments fa-2x mb-2"></i>
+                    <h4>{{ total_chats }}</h4>
+                    <p>Total Chats</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-thumbs-up fa-2x mb-2"></i>
+                    <h4>{{ positive_feedback }}</h4>
+                    <p>Positive Feedback</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-thumbs-down fa-2x mb-2"></i>
+                    <h4>{{ negative_feedback }}</h4>
+                    <p>Negative Feedback</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body text-center">
+                    <i class="fas fa-ambulance fa-2x mb-2"></i>
+                    <h4>{{ emergencies|length }}</h4>
+                    <p>Emergencies</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- User Information -->
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> User Information</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr><th>ID:</th><td>{{ user.id }}</td></tr>
+                        <tr><th>Name:</th><td>{{ user.name }}</td></tr>
+                        <tr><th>Email:</th><td>{{ user.email }}</td></tr>
+                        <tr><th>Age:</th><td>{{ user.age }}</td></tr>
+                        <tr><th>Location:</th><td>{{ user.location }}</td></tr>
+                        <tr><th>Language:</th><td>{{ user.language }}</td></tr>
+                        <tr><th>Registered:</th><td>{{ user.created_at.strftime('%Y-%m-%d') }}</td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Health Progress Chart -->
+            {% if chart_url %}
+            <div class="card mt-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-line"></i> Health Progress</h5>
+                </div>
+                <div class="card-body text-center">
+                    <img src="{{ chart_url }}" alt="Health Progress Chart" class="img-fluid">
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Recent Health Scores -->
+        <div class="col-md-8 mb-4">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-heartbeat"></i> Health Score History</h5>
+                </div>
+                <div class="card-body">
+                    {% if health_scores %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Score</th>
+                                    <th>Status</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for score in health_scores %}
+                                <tr>
+                                    <td>{{ score.date.strftime('%Y-%m-%d') }}</td>
+                                    <td>
+                                        <span class="badge bg-{% if score.score >= 80 %}success{% elif score.score >= 60 %}warning{% else %}danger{% endif %}">
+                                            {{ score.score }}/100
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if score.score >= 80 %}
+                                            <span class="text-success"><i class="fas fa-smile"></i> Excellent</span>
+                                        {% elif score.score >= 60 %}
+                                            <span class="text-warning"><i class="fas fa-meh"></i> Good</span>
+                                        {% else %}
+                                            <span class="text-danger"><i class="fas fa-frown"></i> Poor</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ score.notes or '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">No health scores recorded</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="row">
+        <!-- Recent Chats -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-comments"></i> Recent Chats</h5>
+                </div>
+                <div class="card-body">
+                    {% if chats %}
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        {% for chat in chats %}
+                        <div class="border-bottom pb-2 mb-2">
+                            <small class="text-muted">{{ chat.timestamp.strftime('%m/%d %H:%M') }}</small>
+                            <div><strong>User:</strong> {{ chat.message[:50] }}{% if chat.message|length > 50 %}...{% endif %}</div>
+                            <div><strong>Bot:</strong> {{ chat.response[:50] }}{% if chat.response|length > 50 %}...{% endif %}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">No chat history</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Feedback & Emergencies -->
+        <div class="col-md-6 mb-4">
+            <!-- Recent Feedback -->
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="mb-0"><i class="fas fa-star"></i> Recent Feedback</h5>
+                </div>
+                <div class="card-body">
+                    {% if feedbacks %}
+                    <div style="max-height: 150px; overflow-y: auto;">
+                        {% for feedback in feedbacks %}
+                        <div class="border-bottom pb-2 mb-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-{% if feedback.feedback == 'thumbs_up' %}success{% else %}danger{% endif %}">
+                                    <i class="fas fa-thumbs-{% if feedback.feedback == 'thumbs_up' %}up{% else %}down{% endif %}"></i>
+                                    {{ feedback.feedback|replace('_', ' ')|title }}
+                                </span>
+                                <small class="text-muted">{{ feedback.created_at.strftime('%m/%d %H:%M') }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">No feedback provided</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Recent Emergencies -->
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="fas fa-ambulance"></i> Recent Emergencies</h5>
+                </div>
+                <div class="card-body">
+                    {% if emergencies %}
+                    <div style="max-height: 150px; overflow-y: auto;">
+                        {% for emergency in emergencies %}
+                        <div class="border-bottom pb-2 mb-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <strong>Emergency</strong>
+                                <small class="text-muted">{{ emergency.timestamp.strftime('%m/%d %H:%M') }}</small>
+                            </div>
+                            <small>Location: {{ emergency.location }}</small>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">No emergencies</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function deleteUser(userId, userName) {
+    if (confirm(`Are you sure you want to delete user "${userName}"? This will permanently delete all their data including chats, health scores, and emergency logs.`)) {
+        fetch(`/admin/delete_user/${userId}`, {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'}
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('User deleted successfully!');
+                window.location.href = "{{ url_for('admin_users') }}";
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Error deleting user: ' + error);
+        });
+    }
+}
+</script>
+{% endblock %}

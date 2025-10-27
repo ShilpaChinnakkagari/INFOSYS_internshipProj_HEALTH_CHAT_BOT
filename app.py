@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, f
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import json
 import os
 import io
@@ -17,6 +17,8 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 from transformers import MarianMTModel, MarianTokenizer
 import re
+from functools import wraps
+import csv
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'dev-secret-key-2023'
@@ -78,6 +80,12 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin = db.Column(db.Boolean, default=False)
 
+    # Relationships
+    health_scores = db.relationship('HealthScore', backref='user', lazy=True)
+    chat_history = db.relationship('ChatHistory', backref='user', lazy=True)
+    feedback = db.relationship('ChatFeedback', backref='user', lazy=True)
+    emergencies = db.relationship('EmergencyLog', backref='user', lazy=True)
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -97,6 +105,9 @@ class ChatHistory(db.Model):
     message = db.Column(db.Text, nullable=False)
     response = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship for feedback
+    feedback = db.relationship('ChatFeedback', backref='chat', lazy=True, uselist=False)
 
 class HealthTip(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -114,9 +125,34 @@ class EmergencyLog(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(50), default='triggered')
 
+class ChatFeedback(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chat_history.id'), nullable=False)
+    feedback = db.Column(db.String(10))  # 'thumbs_up', 'thumbs_down'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class SystemAnalytics(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    metric_name = db.Column(db.String(100), nullable=False)
+    metric_value = db.Column(db.Float, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+# Admin required decorator
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        if not current_user.is_admin:
+            flash('Access denied. Admin privileges required.', 'danger')
+            return redirect(url_for('user_dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 def init_db():
     with app.app_context():
@@ -284,10 +320,60 @@ def chat():
         db.session.add(chat_entry)
         db.session.commit()
         
-        return jsonify({'response': response})
+        return jsonify({
+            'response': response,
+            'chat_id': chat_entry.id  # Return chat_id for feedback
+        })
     except Exception as e:
         print(f"Chat error: {e}")
         return jsonify({'response': 'Sorry, I encountered an error. Please try again.'})
+
+@app.route('/chat/feedback', methods=['POST'])
+@login_required
+def chat_feedback():
+    try:
+        data = request.get_json()
+        feedback = ChatFeedback(
+            user_id=current_user.id,
+            chat_id=data['chat_id'],
+            feedback=data['feedback']
+        )
+        db.session.add(feedback)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Feedback error: {e}")
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/chat/delete/<int:chat_id>', methods=['DELETE'])
+@login_required
+def delete_chat(chat_id):
+    try:
+        chat = ChatHistory.query.filter_by(id=chat_id, user_id=current_user.id).first()
+        if chat:
+            # Delete associated feedback first
+            ChatFeedback.query.filter_by(chat_id=chat_id).delete()
+            db.session.delete(chat)
+            db.session.commit()
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'message': 'Chat not found'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/chat/clear_all', methods=['DELETE'])
+@login_required
+def clear_all_chats():
+    try:
+        # Delete all chats and their feedback for the current user
+        chat_ids = [chat.id for chat in ChatHistory.query.filter_by(user_id=current_user.id).all()]
+        ChatFeedback.query.filter(ChatFeedback.chat_id.in_(chat_ids)).delete()
+        ChatHistory.query.filter_by(user_id=current_user.id).delete()
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/emergency', methods=['POST'])
 @login_required
@@ -341,33 +427,40 @@ def update_health_score():
         print(f"Health score error: {e}")
         return jsonify({'success': False, 'message': 'Error updating health score'})
 
-@app.route('/chat/delete/<int:chat_id>', methods=['DELETE'])
+@app.route('/health/score/<int:score_id>', methods=['DELETE'])
 @login_required
-def delete_chat(chat_id):
-    chat = ChatHistory.query.filter_by(id=chat_id, user_id=current_user.id).first()
-    if chat:
-        db.session.delete(chat)
-        db.session.commit()
-        return jsonify({'success': True})
-    return jsonify({'success': False})
+def delete_health_score(score_id):
+    try:
+        score = HealthScore.query.filter_by(id=score_id, user_id=current_user.id).first()
+        if score:
+            db.session.delete(score)
+            db.session.commit()
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'message': 'Score not found'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/profile/update', methods=['POST'])
 @login_required
 def update_profile():
-    current_user.name = request.json.get('name')
-    current_user.age = request.json.get('age')
-    current_user.location = request.json.get('location')
-    current_user.language = request.json.get('language')
-    db.session.commit()
-    return jsonify({'success': True})
+    try:
+        data = request.get_json()
+        current_user.name = data.get('name', current_user.name)
+        current_user.age = data.get('age', current_user.age)
+        current_user.location = data.get('location', current_user.location)
+        current_user.language = data.get('language', current_user.language)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
 
 # Admin Routes
 @app.route('/admin/dashboard')
 @login_required
+@admin_required
 def admin_dashboard():
-    if not current_user.is_admin:
-        return redirect(url_for('user_dashboard'))
-    
     try:
         total_users = User.query.filter_by(is_admin=False).count()
         total_chats = ChatHistory.query.count()
@@ -398,67 +491,196 @@ def admin_dashboard():
                              user_growth_chart=None,
                              health_score_chart=None)
 
+@app.route('/admin/users')
+@login_required
+@admin_required
+def admin_users():
+    users = User.query.filter_by(is_admin=False).all()
+    users_data = []
+    
+    for user in users:
+        # Get user statistics
+        chat_count = ChatHistory.query.filter_by(user_id=user.id).count()
+        emergency_count = EmergencyLog.query.filter_by(user_id=user.id).count()
+        latest_score = HealthScore.query.filter_by(user_id=user.id).order_by(HealthScore.date.desc()).first()
+        
+        # Get feedback counts
+        thumbs_up = ChatFeedback.query.filter_by(user_id=user.id, feedback='thumbs_up').count()
+        thumbs_down = ChatFeedback.query.filter_by(user_id=user.id, feedback='thumbs_down').count()
+        
+        users_data.append({
+            'user': user,
+            'chat_count': chat_count,
+            'emergency_count': emergency_count,
+            'latest_score': latest_score.score if latest_score else 'N/A',
+            'thumbs_up': thumbs_up,
+            'thumbs_down': thumbs_down
+        })
+    
+    return render_template('admin_users.html', users_data=users_data)
+
+@app.route('/admin/user/<int:user_id>')
+@login_required
+@admin_required
+def admin_user_detail(user_id):
+    user = User.query.get_or_404(user_id)
+    
+    # Get user activity data
+    chats = ChatHistory.query.filter_by(user_id=user_id).order_by(ChatHistory.timestamp.desc()).limit(10).all()
+    health_scores = HealthScore.query.filter_by(user_id=user_id).order_by(HealthScore.date.desc()).limit(10).all()
+    emergencies = EmergencyLog.query.filter_by(user_id=user_id).order_by(EmergencyLog.timestamp.desc()).limit(5).all()
+    feedbacks = ChatFeedback.query.filter_by(user_id=user_id).order_by(ChatFeedback.created_at.desc()).limit(10).all()
+    
+    # Calculate statistics
+    total_chats = ChatHistory.query.filter_by(user_id=user_id).count()
+    total_feedback = ChatFeedback.query.filter_by(user_id=user_id).count()
+    positive_feedback = ChatFeedback.query.filter_by(user_id=user_id, feedback='thumbs_up').count()
+    negative_feedback = ChatFeedback.query.filter_by(user_id=user_id, feedback='thumbs_down').count()
+    
+    # Generate health chart
+    chart_url = generate_health_chart(user_id)
+    
+    return render_template('admin_user_detail.html', 
+                         user=user,
+                         chats=chats,
+                         health_scores=health_scores,
+                         emergencies=emergencies,
+                         feedbacks=feedbacks,
+                         total_chats=total_chats,
+                         total_feedback=total_feedback,
+                         positive_feedback=positive_feedback,
+                         negative_feedback=negative_feedback,
+                         chart_url=chart_url)
+
+@app.route('/admin/delete_user/<int:user_id>', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_user(user_id):
+    try:
+        user = User.query.get(user_id)
+        if user and not user.is_admin:
+            # Delete related records
+            HealthScore.query.filter_by(user_id=user_id).delete()
+            ChatHistory.query.filter_by(user_id=user_id).delete()
+            EmergencyLog.query.filter_by(user_id=user_id).delete()
+            ChatFeedback.query.filter_by(user_id=user_id).delete()
+            
+            db.session.delete(user)
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'User deleted successfully'})
+        return jsonify({'success': False, 'message': 'User not found or cannot delete admin'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/admin/export_users')
+@login_required
+@admin_required
+def export_users():
+    users = User.query.filter_by(is_admin=False).all()
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow(['ID', 'Name', 'Email', 'Age', 'Location', 'Language', 'Registration Date', 
+                    'Total Chats', 'Health Score', 'Emergencies', 'Thumbs Up', 'Thumbs Down', 'Last Active'])
+    
+    for user in users:
+        chat_count = ChatHistory.query.filter_by(user_id=user.id).count()
+        latest_score = HealthScore.query.filter_by(user_id=user.id).order_by(HealthScore.date.desc()).first()
+        emergency_count = EmergencyLog.query.filter_by(user_id=user.id).count()
+        thumbs_up = ChatFeedback.query.filter_by(user_id=user.id, feedback='thumbs_up').count()
+        thumbs_down = ChatFeedback.query.filter_by(user_id=user.id, feedback='thumbs_down').count()
+        last_chat = ChatHistory.query.filter_by(user_id=user.id).order_by(ChatHistory.timestamp.desc()).first()
+        
+        writer.writerow([
+            user.id,
+            user.name,
+            user.email,
+            user.age,
+            user.location,
+            user.language,
+            user.created_at.strftime('%Y-%m-%d'),
+            chat_count,
+            latest_score.score if latest_score else 'N/A',
+            emergency_count,
+            thumbs_up,
+            thumbs_down,
+            last_chat.timestamp.strftime('%Y-%m-%d %H:%M') if last_chat else 'Never'
+        ])
+    
+    output.seek(0)
+    return send_file(
+        io.BytesIO(output.getvalue().encode('utf-8')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f'users_export_{datetime.now().strftime("%Y%m%d")}.csv'
+    )
+
 @app.route('/admin/health-tips')
 @login_required
+@admin_required
 def admin_health_tips():
-    if not current_user.is_admin:
-        return redirect(url_for('user_dashboard'))
-    
     tips = HealthTip.query.all()
     return render_template('admin_health_tips.html', tips=tips)
 
 @app.route('/admin/add_health_tip', methods=['POST'])
 @login_required
+@admin_required
 def add_health_tip():
-    if not current_user.is_admin:
-        return jsonify({'success': False})
-    
-    tip = HealthTip(
-        title=request.json.get('title'),
-        content=request.json.get('content'),
-        category=request.json.get('category'),
-        symptoms=request.json.get('symptoms'),
-        created_by=current_user.id
-    )
-    db.session.add(tip)
-    db.session.commit()
-    return jsonify({'success': True})
+    try:
+        tip = HealthTip(
+            title=request.json.get('title'),
+            content=request.json.get('content'),
+            category=request.json.get('category'),
+            symptoms=request.json.get('symptoms'),
+            created_by=current_user.id
+        )
+        db.session.add(tip)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin/update_health_tip/<int:tip_id>', methods=['PUT'])
 @login_required
+@admin_required
 def update_health_tip(tip_id):
-    if not current_user.is_admin:
-        return jsonify({'success': False})
-    
-    tip = HealthTip.query.get(tip_id)
-    if tip:
-        tip.title = request.json.get('title', tip.title)
-        tip.content = request.json.get('content', tip.content)
-        tip.category = request.json.get('category', tip.category)
-        tip.symptoms = request.json.get('symptoms', tip.symptoms)
-        db.session.commit()
-        return jsonify({'success': True})
-    return jsonify({'success': False})
+    try:
+        tip = HealthTip.query.get(tip_id)
+        if tip:
+            tip.title = request.json.get('title', tip.title)
+            tip.content = request.json.get('content', tip.content)
+            tip.category = request.json.get('category', tip.category)
+            tip.symptoms = request.json.get('symptoms', tip.symptoms)
+            db.session.commit()
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'message': 'Tip not found'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin/delete_health_tip/<int:tip_id>', methods=['DELETE'])
 @login_required
+@admin_required
 def delete_health_tip(tip_id):
-    if not current_user.is_admin:
-        return jsonify({'success': False})
-    
-    tip = HealthTip.query.get(tip_id)
-    if tip:
-        db.session.delete(tip)
-        db.session.commit()
-        return jsonify({'success': True})
-    return jsonify({'success': False})
+    try:
+        tip = HealthTip.query.get(tip_id)
+        if tip:
+            db.session.delete(tip)
+            db.session.commit()
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'message': 'Tip not found'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/admin/analytics')
 @login_required
+@admin_required
 def admin_analytics():
-    if not current_user.is_admin:
-        return redirect(url_for('user_dashboard'))
-    
     total_users = User.query.filter_by(is_admin=False).count()
     total_chats = ChatHistory.query.count()
     total_health_scores = HealthScore.query.count()
@@ -475,12 +697,57 @@ def admin_analytics():
                          user_growth_chart=user_growth_chart,
                          health_dist_chart=health_dist_chart)
 
+@app.route('/admin/analytics/data')
+@login_required
+@admin_required
+def analytics_data():
+    # Calculate real-time stats
+    total_users = User.query.filter_by(is_admin=False).count()
+    total_queries = ChatHistory.query.count()
+    queries_today = ChatHistory.query.filter(
+        ChatHistory.timestamp >= datetime.utcnow().date()
+    ).count()
+    
+    thumbs_up = ChatFeedback.query.filter_by(feedback='thumbs_up').count()
+    thumbs_down = ChatFeedback.query.filter_by(feedback='thumbs_down').count()
+    total_feedback = thumbs_up + thumbs_down
+    
+    positive_rate = round((thumbs_up / total_feedback * 100), 2) if total_feedback > 0 else 0
+    feedback_rate = round((total_feedback / total_queries * 100), 2) if total_queries > 0 else 0
+    
+    # Calculate active users today
+    today = datetime.utcnow().date()
+    active_users = db.session.query(ChatHistory.user_id).filter(
+        ChatHistory.timestamp >= today
+    ).distinct().count()
+    
+    # Calculate average health score
+    avg_health_score = db.session.query(db.func.avg(HealthScore.score)).scalar()
+    avg_health_score = round(avg_health_score, 1) if avg_health_score else 0
+    
+    # Generate real chart data
+    chart_data = generate_real_chart_data()
+    
+    return jsonify({
+        'stats': {
+            'total_users': total_users,
+            'total_queries': total_queries,
+            'queries_today': queries_today,
+            'thumbs_up': thumbs_up,
+            'thumbs_down': thumbs_down,
+            'positive_rate': positive_rate,
+            'feedback_rate': feedback_rate,
+            'active_users': active_users,
+            'avg_health_score': avg_health_score,
+            'emergency_count': EmergencyLog.query.count()
+        },
+        'charts': chart_data
+    })
+
 @app.route('/admin/generate_report/<report_type>')
 @login_required
+@admin_required
 def generate_report(report_type):
-    if not current_user.is_admin:
-        return redirect(url_for('user_dashboard'))
-    
     try:
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter)
@@ -556,9 +823,8 @@ def generate_report(report_type):
 
 @app.route('/admin/settings')
 @login_required
+@admin_required
 def admin_settings():
-    if not current_user.is_admin:
-        return redirect(url_for('user_dashboard'))
     return render_template('admin_settings.html')
 
 # Helper Functions
@@ -625,76 +891,6 @@ def generate_chat_response(message, user):
             except:
                 return response
         return response
-
-# Add these routes to your existing app.py
-
-@app.route('/admin/users')
-@login_required
-def admin_users():
-    if not current_user.is_admin:
-        return redirect(url_for('user_dashboard'))
-    
-    users = User.query.filter_by(is_admin=False).all()
-    users_data = []
-    for user in users:
-        latest_score = HealthScore.query.filter_by(user_id=user.id).order_by(HealthScore.date.desc()).first()
-        chat_count = ChatHistory.query.filter_by(user_id=user.id).count()
-        emergency_count = EmergencyLog.query.filter_by(user_id=user.id).count()
-        health_scores = HealthScore.query.filter_by(user_id=user.id).order_by(HealthScore.date.desc()).limit(5).all()
-        
-        users_data.append({
-            'user': user,
-            'latest_score': latest_score.score if latest_score else 'N/A',
-            'chat_count': chat_count,
-            'emergency_count': emergency_count,
-            'health_scores': health_scores
-        })
-    
-    return render_template('admin_users.html', users_data=users_data)
-
-@app.route('/admin/user/<int:user_id>')
-@login_required
-def admin_user_detail(user_id):
-    if not current_user.is_admin:
-        return redirect(url_for('user_dashboard'))
-    
-    user = User.query.get_or_404(user_id)
-    health_scores = HealthScore.query.filter_by(user_id=user_id).order_by(HealthScore.date.desc()).all()
-    chat_history = ChatHistory.query.filter_by(user_id=user_id).order_by(ChatHistory.timestamp.desc()).limit(20).all()
-    emergencies = EmergencyLog.query.filter_by(user_id=user_id).order_by(EmergencyLog.timestamp.desc()).all()
-    
-    # Generate health chart for this user
-    chart_url = generate_health_chart(user_id)
-    
-    return render_template('admin_user_detail.html', 
-                         user=user, 
-                         health_scores=health_scores,
-                         chat_history=chat_history,
-                         emergencies=emergencies,
-                         chart_url=chart_url)
-
-@app.route('/admin/delete_user/<int:user_id>', methods=['DELETE'])
-@login_required
-def delete_user(user_id):
-    if not current_user.is_admin:
-        return jsonify({'success': False, 'message': 'Unauthorized'})
-    
-    try:
-        user = User.query.get(user_id)
-        if user and not user.is_admin:
-            # Delete related records
-            HealthScore.query.filter_by(user_id=user_id).delete()
-            ChatHistory.query.filter_by(user_id=user_id).delete()
-            EmergencyLog.query.filter_by(user_id=user_id).delete()
-            
-            db.session.delete(user)
-            db.session.commit()
-            return jsonify({'success': True, 'message': 'User deleted successfully'})
-        return jsonify({'success': False, 'message': 'User not found'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'message': str(e)})
-    
 
 def generate_health_chart(user_id):
     try:
@@ -801,6 +997,51 @@ def generate_health_score_distribution_chart():
     except Exception as e:
         print(f"Health distribution chart error: {e}")
         return None
+
+def generate_real_chart_data():
+    """Generate real chart data from database"""
+    # Last 7 days data
+    dates = []
+    daily_queries = []
+    daily_feedback = []
+    
+    for i in range(6, -1, -1):
+        date = datetime.utcnow().date() - timedelta(days=i)
+        dates.append(date.strftime('%m/%d'))
+        
+        # Count queries for this day
+        day_queries = ChatHistory.query.filter(
+            db.func.date(ChatHistory.timestamp) == date
+        ).count()
+        daily_queries.append(day_queries)
+        
+        # Count feedback for this day
+        day_feedback = ChatFeedback.query.filter(
+            db.func.date(ChatFeedback.created_at) == date
+        ).count()
+        daily_feedback.append(day_feedback)
+    
+    # Feedback distribution
+    thumbs_up = ChatFeedback.query.filter_by(feedback='thumbs_up').count()
+    thumbs_down = ChatFeedback.query.filter_by(feedback='thumbs_down').count()
+    no_feedback = ChatHistory.query.count() - (thumbs_up + thumbs_down)
+    
+    # Health score distribution
+    excellent = HealthScore.query.filter(HealthScore.score >= 80).count()
+    good = HealthScore.query.filter(HealthScore.score >= 60, HealthScore.score < 80).count()
+    poor = HealthScore.query.filter(HealthScore.score < 60).count()
+    
+    return {
+        'feedback_thumbs_up': thumbs_up,
+        'feedback_thumbs_down': thumbs_down,
+        'feedback_none': no_feedback,
+        'trend_dates': dates,
+        'daily_queries': daily_queries,
+        'daily_feedback': daily_feedback,
+        'health_excellent': excellent,
+        'health_good': good,
+        'health_poor': poor
+    }
 
 if __name__ == '__main__':
     with app.app_context():
