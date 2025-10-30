@@ -68,6 +68,14 @@ def is_hindi_text(text):
     hindi_chars = set('अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसहळक्षज्ञ')
     return any(char in hindi_chars for char in text)
 
+def add_disclaimer(response, is_hindi=False):
+    """Add appropriate disclaimer to the response"""
+    disclaimer_en = "\n\n---\n**Disclaimer:** This health advice is for informational purposes only and is not a substitute for professional medical advice, diagnosis, or treatment. Always seek the advice of your physician or other qualified health provider with any questions you may have regarding a medical condition."
+    
+    disclaimer_hi = "\n\n---\n**अस्वीकरण:** यह स्वास्थ्य सलाह केवल सूचनात्मक उद्देश्यों के लिए है और यह पेशेवर चिकित्सकीय सलाह, निदान, या उपचार का विकल्प नहीं है। किसी भी चिकित्सकीय स्थिति के संबंध में आपके कोई भी प्रश्न हो तो हमेशा अपने चिकित्सक या अन्य योग्य स्वास्थ्य सेवा प्रदाता की सलाह लें।"
+    
+    return response + (disclaimer_hi if is_hindi else disclaimer_en)
+
 # Database Models
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -205,6 +213,27 @@ def init_db():
                         content='For stomach pain:\n• Rest and avoid solid foods\n• Drink clear fluids\n• Apply heat to abdomen\n• Avoid spicy or fatty foods\n• Consider antacids if needed\n• See doctor if pain is severe',
                         category='stomach',
                         symptoms='stomach pain,abdominal pain,पेट दर्द,उदर पीड़ा',
+                        created_by=1
+                    ),
+                    HealthTip(
+                        title='Cough Relief',
+                        content='For cough relief:\n• Drink warm liquids like honey tea\n• Use a humidifier\n• Try cough drops or lozenges\n• Avoid irritants like smoke\n• Get plenty of rest\n• See doctor if cough persists more than a week',
+                        category='respiratory',
+                        symptoms='cough,coughing,खांसी,कफ',
+                        created_by=1
+                    ),
+                    HealthTip(
+                        title='Sore Throat Care',
+                        content='For sore throat:\n• Gargle with warm salt water\n• Drink warm liquids\n• Use throat lozenges\n• Avoid smoking and alcohol\n• Rest your voice\n• Use a humidifier',
+                        category='throat',
+                        symptoms='sore throat,throat pain,गला खराब,गले में दर्द',
+                        created_by=1
+                    ),
+                    HealthTip(
+                        title='Body Aches Relief',
+                        content='For body aches:\n• Rest and relax\n• Take warm baths\n• Use heating pads\n• Gentle stretching\n• Over-the-counter pain relievers\n• Stay hydrated',
+                        category='pain',
+                        symptoms='body ache,muscle pain,शरीर में दर्द,मांसपेशियों में दर्द',
                         created_by=1
                     )
                 ]
@@ -834,62 +863,148 @@ def generate_chat_response(message, user):
     # Check if message is in Hindi
     message_is_hindi = is_hindi_text(message)
     
-    # Check health tips from database
+    # Check health tips from database for ALL matching symptoms
     tips = HealthTip.query.all()
+    matching_tips = []
+    
     for tip in tips:
         if tip.symptoms:
             symptoms = [s.strip().lower() for s in tip.symptoms.split(',')]
             for symptom in symptoms:
                 if symptom and symptom in message_lower:
-                    # If user message is in Hindi, translate the response to Hindi
-                    if message_is_hindi:
-                        try:
-                            hindi_response = translate_to_hindi(tip.content)
-                            return hindi_response
-                        except Exception as e:
-                            print(f"Translation failed: {e}")
-                            return tip.content
-                    else:
-                        return tip.content
+                    matching_tips.append(tip)
+                    break  # Avoid adding same tip multiple times
     
-    # Default responses
-    health_advice = {
-        'fever': "For fever: Rest, drink fluids, take medication, use cool compress. See doctor if high fever persists.",
-        'headache': "For headache: Rest in dark room, stay hydrated, avoid triggers. Consider pain relief medication.",
-        'migraine': "For migraine: Rest in quiet dark room, cold compress, hydration, avoid lights/sounds. Medication if needed.",
-        'cold': "For cold: Rest, fluids, humidifier, over-the-counter meds. See doctor if symptoms worsen.",
-        'cough': "For cough: Honey tea, humidifier, rest. See doctor if persistent or with fever.",
-        'stomach': "For stomach pain: Rest, clear fluids, heat application. Avoid spicy foods. See doctor if severe.",
-        'बुखार': "बुखार के लिए: आराम करें, तरल पदार्थ पिएं, दवा लें, ठंडा कंप्रेस लगाएं। यदि तेज बुखार बना रहे तो डॉक्टर को दिखाएं।",
-        'सिरदर्द': "सिरदर्द के लिए: अंधेरे कमरे में आराम करें, हाइड्रेटेड रहें, ट्रिगर्स से बचें। दर्द निवारक दवा पर विचार करें।",
-        'खांसी': "खांसी के लिए: शहद की चाय, ह्यूमिडिफायर, आराम। यदि लगातार खांसी या बुखार हो तो डॉक्टर को दिखाएं।",
-        'जुकाम': "जुकाम के लिए: आराम करें, तरल पदार्थ पिएं, ह्यूमिडिफायर का उपयोग करें, ओवर-द-काउंटर दवाएं लें।",
+    # Define pre-translated Hindi responses to avoid translation issues
+    hindi_responses = {
+        'multiple_symptoms': "आपके लक्षणों के आधार पर, यहाँ व्यापक सिफारिशें हैं:\n\n",
+        'general_advice': "💡 **एक से अधिक लक्षणों के लिए सामान्य सलाह:**\n• अपने शरीर को ठीक होने में मदद के लिए भरपूर आराम करें\n• पानी और गर्म तरल पदार्थ पीकर हाइड्रेटेड रहें\n• अपने लक्षणों पर नज़र रखें और किसी भी बदलाव को नोट करें\n• जब तक आप बेहतर महसूस न करें तब तक strenuous गतिविधियों से बचें\n• पौष्टिक, आसानी से पचने वाले खाद्य पदार्थ खाएं\n\n",
+        'medical_attention': "🚨 **चिकित्सकीय सहायता कब लें:**\n• लक्षण 3-4 दिनों के बाद बिगड़ते हैं या सुधारते नहीं हैं\n• तेज बुखार (101°F/38.3°C से ऊपर) होता है\n• सांस लेने में कठिनाई या गंभीर दर्द होता है\n• आप भ्रम या चक्कर महसूस करते हैं\n",
+        'greeting': f"नमस्ते {user.name}! मैं आपका स्वास्थ्य सहायक हूं। अंग्रेजी या हिंदी में अपने लक्षण बताएं, और मैं मददगार सलाह प्रदान करूंगा।",
+        'no_symptoms': "मैं समझता हूं कि आप ठीक महसूस नहीं कर रहे हैं। क्या आप अपने लक्षणों के बारे में अधिक विस्तार से बता सकते हैं? उदाहरण के लिए, आप 'सिरदर्द और बुखार' या 'खांसी और गले में खराश' कह सकते हैं।"
     }
     
+    # If multiple tips found, combine them into comprehensive advice
+    if len(matching_tips) > 1:
+        # Get the main symptoms mentioned
+        detected_symptoms = []
+        for tip in matching_tips:
+            if tip.title:
+                detected_symptoms.append(tip.title.replace(' Relief', '').replace(' Care', '').replace(' Management', ''))
+        
+        symptom_list = ", ".join(detected_symptoms[:-1]) + " और " + detected_symptoms[-1] if len(detected_symptoms) > 1 else detected_symptoms[0]
+        
+        if message_is_hindi:
+            # Build Hindi response without translation
+            combined_response = f"आपके {symptom_list} के लक्षणों के आधार पर, यहाँ व्यापक सिफारिशें हैं:\n\n"
+            
+            for i, tip in enumerate(matching_tips, 1):
+                combined_response += f"📍 {tip.title}:\n"
+                # Use pre-translated content or translate if needed
+                if 'headache' in tip.symptoms or 'migraine' in tip.symptoms:
+                    combined_response += "• शांत, अंधेरे कमरे में आराम करें\n• अपने सिर पर ठंडा कंप्रेस लगाएं\n• हाइड्रेटेड रहें\n• तेज रोशनी और तेज आवाज से बचें\n• दर्द निवारक दवाओं पर विचार करें\n• विश्राम तकनीकों का अभ्यास करें\n\n"
+                elif 'fever' in tip.symptoms:
+                    combined_response += "• आराम करें और भरपूर तरल पदार्थ पिएं\n• निर्देशानुसार एसिटामिनोफेन या आइबुप्रोफेन लें\n• अपने माथे पर ठंडा कंप्रेस लगाएं\n• अपने तापमान की नियमित रूप से निगरानी करें\n• यदि बुखार 103°F से ऊपर है या 3 दिन से अधिक रहता है तो चिकित्सकीय सहायता लें\n\n"
+                elif 'cold' in tip.symptoms:
+                    combined_response += "• भरपूर आराम करें\n• चाय या सूप जैसे गर्म तरल पदार्थ पिएं\n• ह्यूमिडिफायर का उपयोग करें\n• गले में खराश के लिए नमक के पानी से गरारे करें\n• ओवर-द-काउंटर कोल्ड की दवाएं लें\n• फैलाव को रोकने के लिए बार-बार हाथ धोएं\n\n"
+                else:
+                    # Safe translation with error handling
+                    try:
+                        translated_content = translate_to_hindi(tip.content)
+                        combined_response += translated_content + "\n\n"
+                    except:
+                        combined_response += tip.content + "\n\n"
+            
+            combined_response += hindi_responses['general_advice']
+            combined_response += hindi_responses['medical_attention']
+            combined_response = add_disclaimer(combined_response, True)
+            return combined_response
+        else:
+            # English response
+            combined_response = f"Based on your symptoms of {symptom_list}, here are comprehensive recommendations:\n\n"
+            
+            for i, tip in enumerate(matching_tips, 1):
+                combined_response += f"📍 {tip.title}:\n{tip.content}\n\n"
+            
+            combined_response += "💡 **General Advice for Multiple Symptoms:**\n"
+            combined_response += "• Get plenty of rest to help your body recover\n"
+            combined_response += "• Stay well-hydrated with water and warm fluids\n"
+            combined_response += "• Monitor your symptoms and note any changes\n"
+            combined_response += "• Avoid strenuous activities until you feel better\n"
+            combined_response += "• Eat nutritious, easy-to-digest foods\n\n"
+            
+            combined_response += "🚨 **When to Seek Medical Attention:**\n"
+            combined_response += "• Symptoms worsen or don't improve after 3-4 days\n"
+            combined_response += "• High fever (above 101°F/38.3°C) develops\n"
+            combined_response += "• Difficulty breathing or severe pain occurs\n"
+            combined_response += "• You experience confusion or dizziness\n"
+            
+            combined_response = add_disclaimer(combined_response, False)
+            return combined_response
+    
+    # If only one tip found, return it normally
+    elif len(matching_tips) == 1:
+        tip = matching_tips[0]
+        
+        if message_is_hindi:
+            # Use pre-translated Hindi content for common symptoms
+            if 'headache' in tip.symptoms or 'migraine' in tip.symptoms:
+                response_content = "माइग्रेन/सिरदर्द से राहत के लिए:\n• शांत, अंधेरे कमरे में आराम करें\n• अपने सिर पर ठंडा कंप्रेस लगाएं\n• हाइड्रेटेड रहें\n• तेज रोशनी और तेज आवाज से बचें\n• दर्द निवारक दवाओं पर विचार करें\n• विश्राम तकनीकों का अभ्यास करें"
+            elif 'fever' in tip.symptoms:
+                response_content = "बुखार प्रबंधन के लिए:\n• आराम करें और भरपूर तरल पदार्थ पिएं\n• निर्देशानुसार एसिटामिनोफेन या आइबुप्रोफेन लें\n• अपने माथे पर ठंडा कंप्रेस लगाएं\n• अपने तापमान की नियमित रूप से निगरानी करें\n• यदि बुखार 103°F से ऊपर है या 3 दिन से अधिक रहता है तो चिकित्सकीय सहायता लें"
+            elif 'cold' in tip.symptoms:
+                response_content = "जुकाम और फ्लू के लक्षणों के लिए:\n• भरपूर आराम करें\n• चाय या सूप जैसे गर्म तरल पदार्थ पिएं\n• ह्यूमिडिफायर का उपयोग करें\n• गले में खराश के लिए नमक के पानी से गरारे करें\n• ओवर-द-काउंटर कोल्ड की दवाएं लें\n• फैलाव को रोकने के लिए बार-बार हाथ धोएं"
+            else:
+                # Safe translation
+                try:
+                    response_content = translate_to_hindi(tip.content)
+                except:
+                    response_content = tip.content
+        else:
+            response_content = tip.content
+        
+        response_content = add_disclaimer(response_content, message_is_hindi)
+        return response_content
+    
+    # Default responses for specific symptoms (pre-translated)
+    health_advice = {
+        'fever': "बुखार के लिए:\n• आराम करें और भरपूर तरल पदार्थ पिएं\n• निर्देशानुसार एसिटामिनोफेन या आइबुप्रोफेन लें\n• अपने माथे पर ठंडा कंप्रेस लगाएं\n• अपने तापमान की नियमित रूप से निगरानी करें\n• यदि बुखार 103°F से ऊपर है या 3 दिन से अधिक रहता है तो चिकित्सकीय सहायता लें",
+        'headache': "सिरदर्द के लिए:\n• अंधेरे कमरे में आराम करें\n• हाइड्रेटेड रहें\n• तेज रोशनी जैसे ट्रिगर्स से बचें\n• दर्द निवारक दवा पर विचार करें\n• ठंडा कंप्रेस लगाएं",
+        'migraine': "माइग्रेन के लिए:\n• शांत अंधेरे कमरे में आराम करें\n• ठंडे कंप्रेस लगाएं\n• हाइड्रेटेड रहें\n• तेज रोशनी और तेज आवाज से बचें\n• दवा पर विचार करें",
+        'cold': "जुकाम के लिए:\n• भरपूर आराम करें\n• गर्म तरल पदार्थ पिएं\n• ह्यूमिडिफायर का उपयोग करें\n• ओवर-द-काउंटर दवाएं लें\n• हाथों को बार-बार धोएं",
+        'cough': "खांसी के लिए:\n• शहद की चाय जैसे गर्म तरल पदार्थ पिएं\n• ह्यूमिडिफायर का उपयोग करें\n• कफ ड्रॉप्स आज़माएं\n• धुएं जैसे उत्तेजक पदार्थों से बचें\n• भरपूर आराम करें",
+        'stomach': "पेट दर्द के लिए:\n• आराम करें और ठोस खाद्य पदार्थों से बचें\n• स्पष्ट तरल पदार्थ पिएं\n• पेट पर गर्मी लगाएं\n• मसालेदार या वसायुक्त खाद्य पदार्थों से बचें\n• यदि गंभीर है तो डॉक्टर को दिखाएं",
+        'body ache': "शरीर में दर्द के लिए:\n• आराम करें और आराम करें\n• गर्म स्नान करें\n• हीटिंग पैड का उपयोग करें\n• हल्का स्ट्रेचिंग करें\n• यदि आवश्यक हो तो दर्द निवारक दवाएं लें",
+        'sore throat': "गले में खराश के लिए:\n• गर्म नमक के पानी से गरारे करें\n• गर्म तरल पदार्थ पिएं\n• गले की लोज़ेंजेस का उपयोग करें\n• धूम्रपान और शराब से बचें\n• अपनी आवाज़ को आराम दें",
+        'बुखार': "बुखार के लिए:\n• आराम करें और भरपूर तरल पदार्थ पिएं\n• निर्देशानुसार एसिटामिनोफेन या आइबुप्रोफेन लें\n• अपने माथे पर ठंडा कंप्रेस लगाएं\n• अपने तापमान की नियमित रूप से निगरानी करें\n• यदि बुखार 103°F से ऊपर है या 3 दिन से अधिक रहता है तो चिकित्सकीय सहायता लें",
+        'सिरदर्द': "सिरदर्द के लिए:\n• अंधेरे कमरे में आराम करें\n• हाइड्रेटेड रहें\n• तेज रोशनी जैसे ट्रिगर्स से बचें\n• दर्द निवारक दवा पर विचार करें\n• ठंडा कंप्रेस लगाएं",
+        'खांसी': "खांसी के लिए:\n• शहद की चाय जैसे गर्म तरल पदार्थ पिएं\n• ह्यूमिडिफायर का उपयोग करें\n• कफ ड्रॉप्स आज़माएं\n• धुएं जैसे उत्तेजक पदार्थों से बचें\n• भरपूर आराम करें",
+        'जुकाम': "जुकाम के लिए:\n• भरपूर आराम करें\n• गर्म तरल पदार्थ पिएं\n• ह्यूमिडिफायर का उपयोग करें\n• ओवर-द-काउंटर दवाएं लें\n• हाथों को बार-बार धोएं",
+        'पेट दर्द': "पेट दर्द के लिए:\n• आराम करें और ठोस खाद्य पदार्थों से बचें\n• स्पष्ट तरल पदार्थ पिएं\n• पेट पर गर्मी लगाएं\n• मसालेदार या वसायुक्त खाद्य पदार्थों से बचें\n• यदि गंभीर है तो डॉक्टर को दिखाएं",
+    }
+    
+    # Check for symptoms in the default advice
     for symptom, advice in health_advice.items():
         if symptom in message_lower:
-            if message_is_hindi and not is_hindi_text(advice):
-                try:
-                    return translate_to_hindi(advice)
-                except:
-                    return advice
-            return advice
+            final_advice = add_disclaimer(advice, message_is_hindi)
+            return final_advice
     
+    # Greetings and other responses
     if any(word in message_lower for word in ['hello', 'hi', 'hey', 'नमस्ते', 'हैलो']):
-        greeting = f"Hello {user.name}! How can I help with your health today?"
         if message_is_hindi:
-            try:
-                return translate_to_hindi(greeting)
-            except:
-                return greeting
+            greeting = hindi_responses['greeting']
+        else:
+            greeting = f"Hello {user.name}! I'm your health assistant. Describe your symptoms in English or Hindi, and I'll provide helpful advice."
+        
+        greeting = add_disclaimer(greeting, message_is_hindi)
         return greeting
     else:
-        response = "I understand you're not feeling well. Could you describe your symptoms in more detail?"
         if message_is_hindi:
-            try:
-                return translate_to_hindi(response)
-            except:
-                return response
+            response = hindi_responses['no_symptoms']
+        else:
+            response = "I understand you're not feeling well. Could you describe your symptoms in more detail? For example, you can say 'headache and fever' or 'cough with sore throat'."
+        
+        response = add_disclaimer(response, message_is_hindi)
         return response
 
 def generate_health_chart(user_id):
