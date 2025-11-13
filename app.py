@@ -138,6 +138,7 @@ class ChatFeedback(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     chat_id = db.Column(db.Integer, db.ForeignKey('chat_history.id'), nullable=False)
     feedback = db.Column(db.String(10))  # 'thumbs_up', 'thumbs_down'
+    reason = db.Column(db.Text)  # Optional reason for thumbs down
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class SystemAnalytics(db.Model):
@@ -234,6 +235,13 @@ def init_db():
                         content='For body aches:\n• Rest and relax\n• Take warm baths\n• Use heating pads\n• Gentle stretching\n• Over-the-counter pain relievers\n• Stay hydrated',
                         category='pain',
                         symptoms='body ache,muscle pain,शरीर में दर्द,मांसपेशियों में दर्द',
+                        created_by=1
+                    ),
+                    HealthTip(
+                        title='Vomiting Relief',
+                        content='For vomiting:\n• Rest and avoid solid foods\n• Sip clear fluids slowly\n• Try ginger tea or crackers\n• Avoid strong smells\n• Use BRAT diet (Bananas, Rice, Applesauce, Toast)\n• See doctor if vomiting persists more than 24 hours',
+                        category='digestive',
+                        symptoms='vomiting,nausea,उल्टी,मतली',
                         created_by=1
                     )
                 ]
@@ -355,7 +363,7 @@ def chat():
         })
     except Exception as e:
         print(f"Chat error: {e}")
-        return jsonify({'response': 'Sorry, I encountered an error. Please try again.'})
+        return jsonify({'response': 'Sorry, I encountered an error. Please try again.', 'chat_id': None})
 
 @app.route('/chat/feedback', methods=['POST'])
 @login_required
@@ -365,7 +373,8 @@ def chat_feedback():
         feedback = ChatFeedback(
             user_id=current_user.id,
             chat_id=data['chat_id'],
-            feedback=data['feedback']
+            feedback=data['feedback'],
+            reason=data.get('reason', '')  # Optional reason field
         )
         db.session.add(feedback)
         db.session.commit()
@@ -773,6 +782,138 @@ def analytics_data():
         'charts': chart_data
     })
 
+@app.route('/admin/analytics/feedback_reasons')
+@login_required
+@admin_required
+def feedback_reasons():
+    """Get common feedback reasons for analysis"""
+    negative_feedbacks = ChatFeedback.query.filter_by(feedback='thumbs_down').filter(ChatFeedback.reason != '').all()
+    
+    reasons = {}
+    for feedback in negative_feedbacks:
+        reason = feedback.reason.lower().strip()
+        if reason:
+            # Group similar reasons
+            if 'unclear' in reason or 'confusing' in reason or 'not clear' in reason:
+                key = 'Unclear/Confusing Advice'
+            elif 'address' in reason or 'relevant' in reason or 'symptoms' in reason:
+                key = 'Not Relevant to Symptoms'
+            elif 'detailed' in reason or 'more info' in reason or 'specific' in reason:
+                key = 'Needs More Detailed Info'
+            elif 'professional' in reason or 'doctor' in reason or 'medical' in reason:
+                key = 'Needs Professional Advice'
+            elif 'understand' in reason or 'language' in reason or 'hindi' in reason or 'english' in reason:
+                key = 'Language/Understanding Issues'
+            else:
+                key = 'Other Reasons'
+            
+            reasons[key] = reasons.get(key, 0) + 1
+    
+    return jsonify({
+        'reasons': reasons
+    })
+
+@app.route('/admin/analytics/feedback_insights')
+@login_required
+@admin_required
+def feedback_insights():
+    """Get detailed feedback insights"""
+    # Calculate feedback rates
+    total_chats = ChatHistory.query.count()
+    total_feedback = ChatFeedback.query.count()
+    thumbs_up = ChatFeedback.query.filter_by(feedback='thumbs_up').count()
+    thumbs_down = ChatFeedback.query.filter_by(feedback='thumbs_down').count()
+    
+    # Feedback over time (last 7 days)
+    feedback_trend = []
+    for i in range(6, -1, -1):
+        date = datetime.utcnow().date() - timedelta(days=i)
+        day_up = ChatFeedback.query.filter(
+            ChatFeedback.feedback == 'thumbs_up',
+            db.func.date(ChatFeedback.created_at) == date
+        ).count()
+        day_down = ChatFeedback.query.filter(
+            ChatFeedback.feedback == 'thumbs_down',
+            db.func.date(ChatFeedback.created_at) == date
+        ).count()
+        
+        feedback_trend.append({
+            'date': date.strftime('%m/%d'),
+            'thumbs_up': day_up,
+            'thumbs_down': day_down
+        })
+    
+    # Most helpful tips (based on thumbs up)
+    helpful_tips = db.session.query(
+        ChatHistory.response,
+        db.func.count(ChatFeedback.id).label('thumbs_up_count')
+    ).join(ChatFeedback, ChatHistory.id == ChatFeedback.chat_id)\
+     .filter(ChatFeedback.feedback == 'thumbs_up')\
+     .group_by(ChatHistory.response)\
+     .order_by(db.desc('thumbs_up_count'))\
+     .limit(5)\
+     .all()
+    
+    # Least helpful tips (based on thumbs down)
+    unhelpful_tips = db.session.query(
+        ChatHistory.response,
+        db.func.count(ChatFeedback.id).label('thumbs_down_count')
+    ).join(ChatFeedback, ChatHistory.id == ChatFeedback.chat_id)\
+     .filter(ChatFeedback.feedback == 'thumbs_down')\
+     .group_by(ChatHistory.response)\
+     .order_by(db.desc('thumbs_down_count'))\
+     .limit(5)\
+     .all()
+    
+    return jsonify({
+        'feedback_stats': {
+            'total_feedback': total_feedback,
+            'thumbs_up': thumbs_up,
+            'thumbs_down': thumbs_down,
+            'feedback_rate': round((total_feedback / total_chats * 100), 2) if total_chats > 0 else 0,
+            'satisfaction_rate': round((thumbs_up / total_feedback * 100), 2) if total_feedback > 0 else 0
+        },
+        'feedback_trend': feedback_trend,
+        'helpful_tips': [
+            {'response': tip[0][:100] + '...' if len(tip[0]) > 100 else tip[0], 'count': tip[1]}
+            for tip in helpful_tips
+        ],
+        'unhelpful_tips': [
+            {'response': tip[0][:100] + '...' if len(tip[0]) > 100 else tip[0], 'count': tip[1]}
+            for tip in unhelpful_tips
+        ]
+    })
+
+@app.route('/admin/analytics/recent_feedback')
+@login_required
+@admin_required
+def recent_feedback():
+    """Get recent feedback activity"""
+    recent_feedbacks = db.session.query(
+        ChatFeedback,
+        ChatHistory.response,
+        User.name
+    ).join(ChatHistory, ChatFeedback.chat_id == ChatHistory.id)\
+     .join(User, ChatFeedback.user_id == User.id)\
+     .order_by(ChatFeedback.created_at.desc())\
+     .limit(20)\
+     .all()
+    
+    feedback_data = []
+    for feedback, response, user_name in recent_feedbacks:
+        feedback_data.append({
+            'user_id': feedback.user_id,
+            'user_name': user_name,
+            'feedback': feedback.feedback,
+            'reason': feedback.reason,
+            'response_preview': response[:100] + '...' if len(response) > 100 else response,
+            'timestamp': feedback.created_at.isoformat()
+        })
+    
+    return jsonify({
+        'recent_feedback': feedback_data
+    })
+
 @app.route('/admin/generate_report/<report_type>')
 @login_required
 @admin_required
@@ -954,6 +1095,8 @@ def generate_chat_response(message, user):
                 response_content = "बुखार प्रबंधन के लिए:\n• आराम करें और भरपूर तरल पदार्थ पिएं\n• निर्देशानुसार एसिटामिनोफेन या आइबुप्रोफेन लें\n• अपने माथे पर ठंडा कंप्रेस लगाएं\n• अपने तापमान की नियमित रूप से निगरानी करें\n• यदि बुखार 103°F से ऊपर है या 3 दिन से अधिक रहता है तो चिकित्सकीय सहायता लें"
             elif 'cold' in tip.symptoms:
                 response_content = "जुकाम और फ्लू के लक्षणों के लिए:\n• भरपूर आराम करें\n• चाय या सूप जैसे गर्म तरल पदार्थ पिएं\n• ह्यूमिडिफायर का उपयोग करें\n• गले में खराश के लिए नमक के पानी से गरारे करें\n• ओवर-द-काउंटर कोल्ड की दवाएं लें\n• फैलाव को रोकने के लिए बार-बार हाथ धोएं"
+            elif 'vomiting' in tip.symptoms:
+                response_content = "उल्टी से राहत के लिए:\n• आराम करें और ठोस खाद्य पदार्थों से बचें\n• धीरे-धीरे स्पष्ट तरल पदार्थ पिएं\n• अदरक की चाय या क्रैकर्स आज़माएं\n• तेज़ गंध से बचें\n• BRAT आहार का उपयोग करें (केले, चावल, सेब की चटनी, टोस्ट)\n• यदि उल्टी 24 घंटे से अधिक समय तक बनी रहती है तो डॉक्टर को दिखाएं"
             else:
                 # Safe translation
                 try:
@@ -976,11 +1119,13 @@ def generate_chat_response(message, user):
         'stomach': "पेट दर्द के लिए:\n• आराम करें और ठोस खाद्य पदार्थों से बचें\n• स्पष्ट तरल पदार्थ पिएं\n• पेट पर गर्मी लगाएं\n• मसालेदार या वसायुक्त खाद्य पदार्थों से बचें\n• यदि गंभीर है तो डॉक्टर को दिखाएं",
         'body ache': "शरीर में दर्द के लिए:\n• आराम करें और आराम करें\n• गर्म स्नान करें\n• हीटिंग पैड का उपयोग करें\n• हल्का स्ट्रेचिंग करें\n• यदि आवश्यक हो तो दर्द निवारक दवाएं लें",
         'sore throat': "गले में खराश के लिए:\n• गर्म नमक के पानी से गरारे करें\n• गर्म तरल पदार्थ पिएं\n• गले की लोज़ेंजेस का उपयोग करें\n• धूम्रपान और शराब से बचें\n• अपनी आवाज़ को आराम दें",
+        'vomiting': "उल्टी के लिए:\n• आराम करें और ठोस खाद्य पदार्थों से बचें\n• धीरे-धीरे स्पष्ट तरल पदार्थ पिएं\n• अदरक की चाय या क्रैकर्स आज़माएं\n• तेज़ गंध से बचें\n• BRAT आहार का उपयोग करें\n• यदि उल्टी 24 घंटे से अधिक समय तक बनी रहती है तो डॉक्टर को दिखाएं",
         'बुखार': "बुखार के लिए:\n• आराम करें और भरपूर तरल पदार्थ पिएं\n• निर्देशानुसार एसिटामिनोफेन या आइबुप्रोफेन लें\n• अपने माथे पर ठंडा कंप्रेस लगाएं\n• अपने तापमान की नियमित रूप से निगरानी करें\n• यदि बुखार 103°F से ऊपर है या 3 दिन से अधिक रहता है तो चिकित्सकीय सहायता लें",
         'सिरदर्द': "सिरदर्द के लिए:\n• अंधेरे कमरे में आराम करें\n• हाइड्रेटेड रहें\n• तेज रोशनी जैसे ट्रिगर्स से बचें\n• दर्द निवारक दवा पर विचार करें\n• ठंडा कंप्रेस लगाएं",
         'खांसी': "खांसी के लिए:\n• शहद की चाय जैसे गर्म तरल पदार्थ पिएं\n• ह्यूमिडिफायर का उपयोग करें\n• कफ ड्रॉप्स आज़माएं\n• धुएं जैसे उत्तेजक पदार्थों से बचें\n• भरपूर आराम करें",
         'जुकाम': "जुकाम के लिए:\n• भरपूर आराम करें\n• गर्म तरल पदार्थ पिएं\n• ह्यूमिडिफायर का उपयोग करें\n• ओवर-द-काउंटर दवाएं लें\n• हाथों को बार-बार धोएं",
         'पेट दर्द': "पेट दर्द के लिए:\n• आराम करें और ठोस खाद्य पदार्थों से बचें\n• स्पष्ट तरल पदार्थ पिएं\n• पेट पर गर्मी लगाएं\n• मसालेदार या वसायुक्त खाद्य पदार्थों से बचें\n• यदि गंभीर है तो डॉक्टर को दिखाएं",
+        'उल्टी': "उल्टी के लिए:\n• आराम करें और ठोस खाद्य पदार्थों से बचें\n• धीरे-धीरे स्पष्ट तरल पदार्थ पिएं\n• अदरक की चाय या क्रैकर्स आज़माएं\n• तेज़ गंध से बचें\n• BRAT आहार का उपयोग करें\n• यदि उल्टी 24 घंटे से अधिक समय तक बनी रहती है तो डॉक्टर को दिखाएं",
     }
     
     # Check for symptoms in the default advice
