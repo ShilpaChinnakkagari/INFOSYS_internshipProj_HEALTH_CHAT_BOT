@@ -1,4 +1,4 @@
-<img width="900" height="505" alt="image" src="https://github.com/user-attachments/assets/81bd01eb-b15f-4d80-8871-a695804df632" /># Health Wellness Chatbot
+# Health Wellness Chatbot
 
 An intelligent digital health assistant designed to promote wellness and provide preventive healthcare guidance.
 
@@ -24,7 +24,7 @@ An intelligent digital health assistant designed to promote wellness and provide
    git clone <repository-url>
    cd health_wellness_chatbot
 
-
+<img width="900" height="505" alt="image" src="https://github.com/user-attachments/assets/81bd01eb-b15f-4d80-8871-a695804df632" />
 <img width="900" height="498" alt="image" src="https://github.com/user-attachments/assets/f02fc876-36b0-47b4-81e3-2b6bf9cf49ba" />
 <img width="900" height="433" alt="image" src="https://github.com/user-attachments/assets/a3ad4151-53c9-40ab-a6e6-fd275b89edd3" />
 <img width="900" height="359" alt="image" src="https://github.com/user-attachments/assets/a812c9c5-61d0-485b-80a2-b1381c901ada" />
